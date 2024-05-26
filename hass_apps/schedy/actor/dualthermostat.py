@@ -217,14 +217,14 @@ class DualThermostatActor(ActorBase):
                     level="WARNING",
                 )
 
-        temp_attrs = ["temperature", "current_temperature"]
+        temp_attrs = ["target_temp_high", "target_temp_low", "current_temperature"]
         for attr in temp_attrs:
             value = state.get(attr)
             try:
                 value = float(value)  # type: ignore
             except (TypeError, ValueError):
                 self.log(
-                    "The value {!r} of attribute {!r} is not a valid dual temperature.".format(
+                    "The value {!r} of attribute {!r} is not a valid temperature.".format(
                         value, attr
                     ),
                     level="WARNING",
