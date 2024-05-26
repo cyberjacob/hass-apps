@@ -116,8 +116,8 @@ class ThermostatExpressionHelper(ExpressionHelperBase):
 
 TEMP_SCHEMA = vol.Schema(
     vol.All(
-        vol.Any(list, tuple, Off, vol.All(str, lambda v: v.upper(), "OFF")),
-        lambda v: DualTemp(v),  # pylint: disable=unnecessary-lambda
+        vol.Any(list, tuple, Off, vol.All(str, lambda v: v.upper(), "OFF"), DualTemp),
+        lambda v: v if isinstance(v, DualTemp) else DualTemp(v),  # pylint: disable=unnecessary-lambda
     )
 )
 
@@ -175,9 +175,7 @@ class DualThermostatActor(ActorBase):
     name = "dualthermostat"
     config_schema_dict = {
         **ActorBase.config_schema_dict,
-        #TODO: Look into error when enabling this
-        # "Configuration error: expected list for dictionary value @ data['delta']. Got None"
-        # vol.Optional("delta", default=DualTemp([0, 0])): vol.All(TEMP_SCHEMA, vol.NotIn([DualTemp(OFF)])),
+        vol.Optional("delta", default=DualTemp([0, 0])): vol.All(TEMP_SCHEMA, vol.NotIn([DualTemp(OFF)])),
         vol.Optional("min_temp", default=None): vol.Any(
             vol.All(TEMP_SCHEMA, vol.NotIn([DualTemp(OFF)])), None
         ),
@@ -310,23 +308,30 @@ class DualThermostatActor(ActorBase):
         The return value is either the temperature to set or None,
         if nothing has to be sent."""
 
+        self.log(f"Initial value: {value}", level="DEBUG")
+
         if value.is_off:
             value = self.cfg["off_temp"]
 
         if not value.is_off:
-            # value += self.cfg["delta"]
+            self.log(f"Applying delta: {self.cfg['delta']} to value: {value}", level="DEBUG")
+            value.temp_low += self.cfg['delta'].temp_low
+            value.temp_high += self.cfg['delta'].temp_high
+            self.log(f"Value after applying delta: {value}", level="DEBUG")
 
             if isinstance(self.cfg["min_temp"], DualTemp):
                 if value.temp_low < self.cfg["min_temp"].temp_low:
                     value.temp_low = self.cfg["min_temp"].temp_low
                 if value.temp_high < self.cfg["min_temp"].temp_high:
                     value.temp_high = self.cfg["min_temp"].temp_high
+                self.log(f"Value after applying min_temp: {value}", level="DEBUG")
 
             if isinstance(self.cfg["max_temp"], DualTemp):
                 if value.temp_low > self.cfg["max_temp"].temp_low:
                     value.temp_low = self.cfg["max_temp"].temp_low
                 if value.temp_high > self.cfg["max_temp"].temp_high:
                     value.temp_high = self.cfg["max_temp"].temp_high
+                self.log(f"Value after applying max_temp: {value}", level="DEBUG")
 
         elif not self.cfg["supports_hvac_modes"]:
             self.log(
@@ -340,6 +345,7 @@ class DualThermostatActor(ActorBase):
             )
             return None
 
+        self.log(f"Final value to be set: {value}", level="DEBUG")
         return value
 
     def notify_state_changed(self, attrs: dict) -> T.Optional[DualTemp]:
